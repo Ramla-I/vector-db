@@ -1,0 +1,17 @@
+# Core dependencies
+chromadb>=0.4.0
+pymupdf>=1.23.0
+openai>=1.0.0
+tiktoken>=0.5.0
+python-dotenv>=1.0.0
+
+# Local reranking (FlashRank - no torch required)
+flashrank>=0.2.0
+
+# Optional: Cohere API reranking
+cohere>=4.0.0
+
+# Optional: BGE reranker (requires Python 3.12, torch)
+# Uncomment if using --rerank-bge:
+# torch>=2.0.0
+# transformers<4.45
