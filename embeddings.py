@@ -56,11 +56,45 @@ class OpenAIEmbedding(EmbeddingProvider):
         return self.embed([text])[0]
 
 
+class FastEmbedProvider(EmbeddingProvider):
+    """Local embedding provider using FastEmbed (ONNX, no API calls)."""
+
+    BATCH_SIZE = 256
+
+    def __init__(self):
+        from fastembed import TextEmbedding
+
+        self.model = TextEmbedding(model_name=config.LOCAL_EMBEDDING_MODEL)
+
+    def embed(self, texts: List[str], progress_callback=None) -> List[List[float]]:
+        """Generate embeddings locally with batching."""
+        all_embeddings = []
+        total_batches = (len(texts) + self.BATCH_SIZE - 1) // self.BATCH_SIZE
+
+        for i in range(0, len(texts), self.BATCH_SIZE):
+            batch = texts[i : i + self.BATCH_SIZE]
+            batch_num = i // self.BATCH_SIZE + 1
+
+            if progress_callback:
+                progress_callback(batch_num, total_batches)
+
+            batch_embeddings = list(self.model.embed(batch))
+            all_embeddings.extend([emb.tolist() for emb in batch_embeddings])
+
+        return all_embeddings
+
+    def embed_query(self, text: str) -> List[float]:
+        """Generate embedding for a single query text."""
+        return self.embed([text])[0]
+
+
 def get_embedding_provider() -> EmbeddingProvider:
     """Factory function to get the configured embedding provider."""
     provider = config.EMBEDDING_PROVIDER.lower()
 
     if provider == "openai":
         return OpenAIEmbedding()
+    elif provider == "local":
+        return FastEmbedProvider()
     else:
         raise ValueError(f"Unsupported embedding provider: {provider}")

@@ -15,6 +15,7 @@ DATABASES_DIR = BASE_DIR / "databases"
 EMBEDDING_PROVIDER = os.getenv("EMBEDDING_PROVIDER", "openai")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 EMBEDDING_MODEL = "text-embedding-3-small"
+LOCAL_EMBEDDING_MODEL = os.getenv("LOCAL_EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
 
 # Chunking configuration
 CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "500"))

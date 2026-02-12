@@ -1,6 +1,6 @@
 # Vector DB
 
-A CLI tool for semantic search over PDF and Markdown documents using ChromaDB and OpenAI embeddings.
+A CLI tool for semantic search over PDF and Markdown documents using ChromaDB. Supports both local (FastEmbed) and OpenAI embeddings - can run fully offline and free.
 
 ## Features
 
@@ -12,6 +12,7 @@ A CLI tool for semantic search over PDF and Markdown documents using ChromaDB an
 - **Multiple reranking options**: Cohere API, FlashRank (local), or BGE (local with torch)
 - **Metadata filtering**: Filter results by source, page, or custom attributes
 - **Technical document optimization**: Special preprocessing for register definitions, tables, and technical specs
+- **Fully offline mode**: Local embeddings (FastEmbed) + local reranking (FlashRank) - no API calls needed
 
 ## Architecture
 
@@ -22,9 +23,9 @@ A CLI tool for semantic search over PDF and Markdown documents using ChromaDB an
 │                                                                             │
 │  ┌──────────┐    ┌───────────────────┐    ┌──────────────┐    ┌──────────┐ │
 │  │  PDF/MD  │───▶│  Text Processor   │───▶│   Chunker    │───▶│ Embedder │ │
-│  │   File   │    │  - Clean text     │    │  - Sections  │    │ (OpenAI) │ │
-│  └──────────┘    │  - Extract tables │    │  - Overlap   │    └────┬─────┘ │
-│                  │  - Add key terms  │    │  - Metadata  │         │       │
+│  │   File   │    │  - Clean text     │    │  - Sections  │    │(local or │ │
+│  └──────────┘    │  - Extract tables │    │  - Overlap   │    │ OpenAI)│ │
+│                  │  - Add key terms  │    │  - Metadata  │    └────┬─────┘ │
 │                  └───────────────────┘    └──────────────┘         │       │
 │                                                                     ▼       │
 │                                                              ┌──────────┐   │
@@ -40,7 +41,8 @@ A CLI tool for semantic search over PDF and Markdown documents using ChromaDB an
 │                                                                             │
 │  ┌─────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌───────┐  │
 │  │  Query  │───▶│ Embedder │───▶│ ChromaDB │───▶│ Reranker │───▶│Keyword│  │
-│  │         │    │ (OpenAI) │    │  Search  │    │(optional)│    │ Boost │  │
+│  │         │    │(local or │    │  Search  │    │(optional)│    │ Boost │  │
+│  │         │    │ OpenAI)  │    │          │    │          │    │       │  │
 │  └─────────┘    └──────────┘    └────┬─────┘    └────┬─────┘    └───┬───┘  │
 │                                      │               │              │      │
 │                                      ▼               ▼              ▼      │
@@ -58,20 +60,37 @@ A CLI tool for semantic search over PDF and Markdown documents using ChromaDB an
 # Clone the repository
 cd vector_db
 
-# Create virtual environment (Python 3.11 or 3.12 recommended for all features)
+# Create virtual environment
 python3 -m venv venv
 source venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
 
-# For BGE reranker support (optional, requires Python 3.12)
-pip install torch 'transformers<4.45'
-
 # Configure environment
 cp .env.example .env
-# Edit .env and add your OPENAI_API_KEY
+# Edit .env to choose your embedding provider (local or openai)
 ```
+
+### Embedding Providers
+
+**Local (default, recommended)** - Free, offline, no API key needed:
+```bash
+# .env
+EMBEDDING_PROVIDER=local
+```
+Uses FastEmbed with `BAAI/bge-small-en-v1.5` (ONNX, ~67MB model downloaded on first use).
+
+**OpenAI** - Requires API key:
+```bash
+# .env
+EMBEDDING_PROVIDER=openai
+OPENAI_API_KEY=your-key-here
+```
+
+> **Note:** Databases are tied to their embedding provider. A database created with local
+> embeddings (384 dimensions) is not compatible with OpenAI embeddings (1536 dimensions).
+> Create separate databases if you want to compare providers.
 
 ## Quick Start
 
@@ -198,14 +217,18 @@ python main.py search mydb "complex technical query" --rerank-local --keyword-bo
 Edit `.env` to configure:
 
 ```bash
-# Required: OpenAI API key for embeddings
+# Embedding provider: "local" (free, offline) or "openai" (API)
+EMBEDDING_PROVIDER=local
+
+# OpenAI API key (only needed if EMBEDDING_PROVIDER=openai)
 OPENAI_API_KEY=your-api-key-here
+
+# Local embedding model (only used if EMBEDDING_PROVIDER=local)
+# Options: BAAI/bge-small-en-v1.5 (default, 384d), BAAI/bge-base-en-v1.5 (768d)
+LOCAL_EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
 
 # Optional: Cohere API key for --rerank option
 COHERE_API_KEY=your-cohere-key
-
-# Embedding provider (default: openai)
-EMBEDDING_PROVIDER=openai
 
 # Chunking settings
 CHUNK_SIZE=500      # Target tokens per chunk
@@ -221,7 +244,7 @@ TOP_K_RESULTS=5     # Default number of results
 vector_db/
 ├── main.py              # CLI entry point
 ├── config.py            # Configuration management
-├── embeddings.py        # OpenAI embedding provider
+├── embeddings.py        # Embedding providers (FastEmbed local + OpenAI)
 ├── pdf_processor.py     # PDF parsing and chunking
 ├── text_processor.py    # Markdown/text processing with preprocessing
 ├── vector_store.py      # ChromaDB operations + keyword boost
@@ -258,33 +281,50 @@ Sections mentioning many registers without definitions are marked as overviews t
 
 Tested on STM32 reference manual (~700 pages, 1867 chunks):
 
-| Operation | Time |
-|-----------|------|
-| Ingestion | ~60s (with embedding) |
-| Search (basic) | ~1.3s |
-| Search + keyword-boost | ~1.6s |
-| Search + rerank-local | ~2.7s |
-| Search + rerank (Cohere) | ~2.8s |
-| Search + rerank-bge | ~16s |
+### Search Latency
 
-## Accuracy Benchmarks
+| Embedding Provider | Search Method | Avg Time |
+|-------------------|---------------|----------|
+| **Local (FastEmbed)** | + keyword-boost | **~800ms** |
+| OpenAI API | + keyword-boost | ~2000ms |
+| OpenAI File Search | (built-in) | ~1600ms |
+
+### Operation Times
+
+| Operation | Local Embeddings | OpenAI Embeddings |
+|-----------|-----------------|-------------------|
+| Ingestion (1867 chunks) | ~30s | ~60s |
+| Search (basic) | ~750ms | ~1.3s |
+| Search + keyword-boost | ~800ms | ~2.0s |
+| Search + rerank-local | ~1.5s | ~2.7s |
+| Search + rerank (Cohere) | ~1.6s | ~2.8s |
+
+### Accuracy Benchmarks
 
 Tested with AFIO register queries (EVCR, MAPR, MAPR2):
 
-| Method | Accuracy |
-|--------|----------|
-| Raw ChromaDB | 2/3 |
-| `--keyword-boost` | **3/3** |
-| `--rerank-local` | 2/3 |
-| `--rerank-local --keyword-boost` | **3/3** |
-| `--rerank` (Cohere) | **3/3** |
+| Method | Local Embeddings | OpenAI Embeddings | OpenAI File Search |
+|--------|-----------------|-------------------|--------------------|
+| Raw search | 2/3 | 2/3 | 0/3 |
+| `--keyword-boost` | **3/3** | **3/3** | N/A |
+| `--rerank-local --keyword-boost` | **3/3** | **3/3** | N/A |
+| `--rerank` (Cohere) | **3/3** | **3/3** | N/A |
+
+### Cost Per Query
+
+| Method | Cost |
+|--------|------|
+| **Local embeddings** | **Free** |
+| OpenAI embeddings | ~$0.00002 |
+| OpenAI File Search | ~$0.0025 |
 
 ## Requirements
 
-- Python 3.11+ (3.12 recommended for BGE reranker)
-- OpenAI API key (for embeddings)
+- Python 3.11+
+- No API keys needed for local mode (FastEmbed + FlashRank)
+- Optional: OpenAI API key (for OpenAI embeddings)
 - Optional: Cohere API key (for `--rerank`)
-- Optional: PyTorch (for `--rerank-bge`)
+- Optional: PyTorch + Python 3.12 (for `--rerank-bge`)
 
 ## License
 

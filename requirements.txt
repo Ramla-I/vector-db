@@ -1,14 +1,19 @@
 # Core dependencies
 chromadb>=0.4.0
 pymupdf>=1.23.0
-openai>=1.0.0
 tiktoken>=0.5.0
 python-dotenv>=1.0.0
 
-# Local reranking (FlashRank - no torch required)
+# Local embeddings (FastEmbed - ONNX, no torch required)
+fastembed>=0.7.0
+
+# Local reranking (FlashRank - ONNX, no torch required)
 flashrank>=0.2.0
 
-# Optional: Cohere API reranking
+# Optional: OpenAI embeddings (only needed if EMBEDDING_PROVIDER=openai)
+openai>=1.0.0
+
+# Optional: Cohere API reranking (only needed for --rerank)
 cohere>=4.0.0
 
 # Optional: BGE reranker (requires Python 3.12, torch)
