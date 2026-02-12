@@ -10,7 +10,7 @@ class EmbeddingProvider(ABC):
     """Abstract base class for embedding providers."""
 
     @abstractmethod
-    def embed(self, texts: List[str]) -> List[List[float]]:
+    def embed(self, texts: List[str], progress_callback=None) -> List[List[float]]:
         """Generate embeddings for a list of texts."""
         pass
 

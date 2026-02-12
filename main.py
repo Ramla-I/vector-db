@@ -132,18 +132,16 @@ def cmd_search(args):
     store = VectorStore(args.db_name)
 
     start_time = time.perf_counter()
-    # Fetch more results if reranking or keyword boosting (will narrow down after)
-    do_rerank = args.rerank or args.rerank_local or getattr(args, 'rerank_bge', False)
-    keyword_boost = getattr(args, 'keyword_boost', False)
-    fetch_k = args.top_k * 5 if (do_rerank or keyword_boost) else args.top_k
-    # Don't apply keyword boost before reranking (it will be applied after)
-    results = store.search(args.query, n_results=fetch_k, where=where, keyword_boost=False)
+    # Expand candidate pool when post-processing (rerank/keyword boost) is enabled
+    do_rerank = args.rerank or args.rerank_local or args.rerank_bge
+    fetch_k = args.top_k * 5 if (do_rerank or args.keyword_boost) else args.top_k
+    results = store.search(args.query, n_results=fetch_k, where=where)
 
     # Apply reranking if requested
     if do_rerank and results:
         try:
             from reranker import get_reranker
-            if getattr(args, 'rerank_bge', False):
+            if args.rerank_bge:
                 provider = "bge"
             elif args.rerank_local:
                 provider = "local"
@@ -155,7 +153,7 @@ def cmd_search(args):
             print(f"Warning: Reranking disabled - {e}")
 
     # Apply keyword boost after reranking (if requested)
-    if keyword_boost and results:
+    if args.keyword_boost and results:
         results = store._apply_keyword_boost(args.query, results)
 
     elapsed_ms = (time.perf_counter() - start_time) * 1000

@@ -12,7 +12,7 @@ BASE_DIR = Path(__file__).parent
 DATABASES_DIR = BASE_DIR / "databases"
 
 # Embedding configuration
-EMBEDDING_PROVIDER = os.getenv("EMBEDDING_PROVIDER", "openai")
+EMBEDDING_PROVIDER = os.getenv("EMBEDDING_PROVIDER", "local")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 EMBEDDING_MODEL = "text-embedding-3-small"
 LOCAL_EMBEDDING_MODEL = os.getenv("LOCAL_EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")

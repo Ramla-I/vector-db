@@ -1,12 +1,8 @@
-"""Reranking support - Cohere API and local FlashRank."""
+"""Reranking support - Cohere API, local FlashRank, and BGE cross-encoder."""
 
 import os
 from typing import List, Dict, Any
 from abc import ABC, abstractmethod
-
-from dotenv import load_dotenv
-
-load_dotenv()
 
 
 class Reranker(ABC):

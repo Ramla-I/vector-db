@@ -1,5 +1,6 @@
-"""ChromaDB operations for vector storage."""
+"""ChromaDB operations for vector storage and retrieval."""
 
+import re
 import shutil
 from pathlib import Path
 from typing import List, Dict, Any, Optional
@@ -78,14 +79,8 @@ class VectorStore:
         query: str,
         n_results: int = None,
         where: Optional[Dict[str, Any]] = None,
-        keyword_boost: bool = False,
     ) -> List[Dict[str, Any]]:
-        """Search for similar documents.
-
-        Args:
-            keyword_boost: If True, boost results containing exact query terms
-                          (helps distinguish similar items like MAPR vs MAPR2)
-        """
+        """Search for similar documents using cosine similarity."""
         if n_results is None:
             n_results = config.TOP_K_RESULTS
 
@@ -101,9 +96,9 @@ class VectorStore:
         formatted_results = []
         if results["documents"] and results["documents"][0]:
             for i, doc in enumerate(results["documents"][0]):
-                # ChromaDB returns distances, convert to similarity score
+                # ChromaDB returns cosine distance; convert to similarity
                 distance = results["distances"][0][i]
-                score = 1 - distance  # cosine distance to similarity
+                score = 1 - distance
 
                 formatted_results.append(
                     {
@@ -112,10 +107,6 @@ class VectorStore:
                         "score": score,
                     }
                 )
-
-        # Apply keyword boost if requested
-        if keyword_boost and formatted_results:
-            formatted_results = self._apply_keyword_boost(query, formatted_results)
 
         return formatted_results
 
@@ -126,9 +117,12 @@ class VectorStore:
 
         Extracts significant terms from query (register names, technical terms)
         and boosts results containing exact matches. Uses word boundaries to
-        avoid partial matches (MAPR vs MAPR2).
+        avoid partial matches (e.g. AFIO_MAPR vs AFIO_MAPR2).
+
+        Boost tiers: +0.20 for REGISTER DEFINITION match, +0.10 for KEY term
+        match, +0.05 for body text match. Scores are NOT capped at 1.0 to
+        preserve differentiation between boosted results.
         """
-        import re
 
         # Extract potential register/technical terms from query
         # Matches: AFIO_MAPR2, GPIO_CRL, TIM1_CH1, etc.

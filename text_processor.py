@@ -4,9 +4,8 @@ import re
 from pathlib import Path
 from typing import List, Dict, Any
 
-import tiktoken
-
 import config
+from chunking import count_tokens, split_text_recursive, add_overlap
 
 
 class TextProcessor:
@@ -20,9 +19,6 @@ class TextProcessor:
     ]
 
     def __init__(self):
-        self.tokenizer = tiktoken.get_encoding("cl100k_base")
-        self.chunk_size = config.CHUNK_SIZE
-        self.chunk_overlap = config.CHUNK_OVERLAP
         self._header_regexes = [re.compile(p, re.MULTILINE) for p in self.HEADER_PATTERNS]
 
     def clean_text(self, text: str) -> str:
@@ -41,10 +37,6 @@ class TextProcessor:
         text = text.strip()
 
         return text
-
-    def count_tokens(self, text: str) -> int:
-        """Count tokens in text using tiktoken."""
-        return len(self.tokenizer.encode(text))
 
     def split_by_sections(self, text: str) -> List[Dict[str, Any]]:
         """Split markdown by headers, preserving section context."""
@@ -102,11 +94,11 @@ class TextProcessor:
         key_terms = self.extract_key_terms(full_text, header)
         full_text_with_keys = key_terms + full_text
 
-        if self.count_tokens(full_text_with_keys) <= self.chunk_size:
+        if count_tokens(full_text_with_keys) <= config.CHUNK_SIZE:
             return [full_text_with_keys] if full_text_with_keys.strip() else []
 
         # Otherwise, split content and prepend header to each chunk
-        chunks = self._split_text_recursive(content)
+        chunks = split_text_recursive(content)
 
         # Add header context and key terms to each chunk
         result = []
@@ -124,46 +116,6 @@ class TextProcessor:
                 result.append(final_chunk)
 
         return result
-
-    def _split_text_recursive(
-        self, text: str, separators: List[str] = None
-    ) -> List[str]:
-        """Recursively split text by separators."""
-        if separators is None:
-            separators = ["\n\n", "\n", ". ", " "]
-
-        if not separators or self.count_tokens(text) <= self.chunk_size:
-            return [text] if text.strip() else []
-
-        separator = separators[0]
-        remaining_separators = separators[1:]
-
-        splits = text.split(separator)
-        chunks = []
-        current_chunk = ""
-
-        for split in splits:
-            test_chunk = (
-                current_chunk + separator + split if current_chunk else split
-            )
-            if self.count_tokens(test_chunk) <= self.chunk_size:
-                current_chunk = test_chunk
-            else:
-                if current_chunk:
-                    chunks.append(current_chunk)
-                if self.count_tokens(split) > self.chunk_size:
-                    sub_chunks = self._split_text_recursive(
-                        split, remaining_separators
-                    )
-                    chunks.extend(sub_chunks)
-                    current_chunk = ""
-                else:
-                    current_chunk = split
-
-        if current_chunk:
-            chunks.append(current_chunk)
-
-        return chunks
 
     def has_markdown_table(self, text: str) -> bool:
         """Check if text contains a markdown table."""
@@ -219,40 +171,6 @@ class TextProcessor:
             return f"{register_title}[KEY: {' | '.join(terms)}]\n\n"
         return ""
 
-    def add_overlap(self, chunks: List[str]) -> List[str]:
-        """Add overlap from both preceding and succeeding chunks for context continuity."""
-        if len(chunks) <= 1:
-            return chunks
-
-        overlapped = []
-        half_overlap = self.chunk_overlap // 2
-
-        for i, chunk in enumerate(chunks):
-            parts = []
-
-            # Add overlap from preceding chunk
-            if i > 0:
-                prev_tokens = self.tokenizer.encode(chunks[i - 1])
-                overlap_tokens = prev_tokens[-half_overlap:]
-                overlap_text = self.tokenizer.decode(overlap_tokens).strip()
-                if overlap_text:
-                    parts.append(f"[...] {overlap_text}")
-
-            # Add main chunk content
-            parts.append(chunk)
-
-            # Add overlap from succeeding chunk
-            if i < len(chunks) - 1:
-                next_tokens = self.tokenizer.encode(chunks[i + 1])
-                overlap_tokens = next_tokens[:half_overlap]
-                overlap_text = self.tokenizer.decode(overlap_tokens).strip()
-                if overlap_text:
-                    parts.append(f"{overlap_text} [...]")
-
-            overlapped.append("\n\n".join(parts))
-
-        return overlapped
-
     def process_file(
         self, file_path: Path, extra_metadata: Dict[str, Any] = None
     ) -> List[Dict[str, Any]]:
@@ -273,7 +191,7 @@ class TextProcessor:
 
         for section in sections:
             section_chunks = self.chunk_section(section)
-            section_chunks = self.add_overlap(section_chunks)
+            section_chunks = add_overlap(section_chunks)
 
             for chunk_text in section_chunks:
                 metadata = {
